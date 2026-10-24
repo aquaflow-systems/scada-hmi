@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AquaFlow Systems — SCADA Operator View</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #d29922;
+  }
+  .status {
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+  .status.connected { color: #3fb950; }
+  .status.disconnected { color: #f85149; }
+  svg {
+    width: 100%;
+    max-width: 1100px;
+    height: auto;
+    display: block;
+  }
+  .stage-box {
+    fill: #161b22;
+    stroke: #d29922;
+    stroke-width: 1.5;
+  }
+  .stage-title {
+    fill: #e6edf3;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .stage-value {
+    fill: #8b949e;
+    font-size: 11px;
+    font-family: ui-monospace, monospace;
+  }
+  .pipe {
+    stroke: #d29922;
+    stroke-width: 2;
+    fill: none;
+    marker-end: url(#arrow);
+  }
+</style>
+</head>
+<body>
+  <h1>AquaFlow Systems — SCADA Operator View</h1>
+  <div class="status disconnected" id="status">connecting...</div>
+
+  <svg viewBox="0 0 1100 260" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L6,3 L0,6 Z" fill="#d29922" />
+      </marker>
+    </defs>
+
+    <path class="pipe" d="M190,90 H210" />
+    <path class="pipe" d="M400,90 H420" />
+    <path class="pipe" d="M610,90 H630" />
+    <path class="pipe" d="M820,90 H840" />
+
+    <g>
+      <rect class="stage-box" x="10" y="40" width="180" height="100" rx="8" />
+      <text class="stage-title" x="24" y="64">Raw Water Intake</text>
+      <text class="stage-value" x="24" y="86">tank: <tspan id="rw-tank">--</tspan>%</text>
+      <text class="stage-value" x="24" y="104">pump: <tspan id="rw-pump">--</tspan>%</text>
+    </g>
+
+    <g>
+      <rect class="stage-box" x="210" y="40" width="190" height="100" rx="8" />
+      <text class="stage-title" x="224" y="64">Dosage Chimique</text>
+      <text class="stage-value" x="224" y="86">pH: <tspan id="ds-ph">--</tspan></text>
+      <text class="stage-value" x="224" y="104">flow: <tspan id="ds-flow">--</tspan> L/min</text>
+      <text class="stage-value" x="224" y="122">pump: <tspan id="ds-pump">--</tspan>%</text>
+    </g>
+
+    <g>
+      <rect class="stage-box" x="420" y="40" width="190" height="100" rx="8" />
+      <text class="stage-title" x="434" y="64">Filtration</text>
+      <text class="stage-value" x="434" y="86">turbidity out: <tspan id="fl-turb">--</tspan> NTU</text>
+      <text class="stage-value" x="434" y="104">efficiency: <tspan id="fl-eff">--</tspan>%</text>
+    </g>
+
+    <g>
+      <rect class="stage-box" x="630" y="40" width="190" height="100" rx="8" />
+      <text class="stage-title" x="644" y="64">Desinfection</text>
+      <text class="stage-value" x="644" y="86">chlorine: <tspan id="di-cl">--</tspan> mg/L</text>
+      <text class="stage-value" x="644" y="104">pathogen idx: <tspan id="di-path">--</tspan></text>
+    </g>
+
+    <g>
+      <rect class="stage-box" x="840" y="40" width="190" height="100" rx="8" />
+      <text class="stage-title" x="854" y="64">Distribution</text>
+      <text class="stage-value" x="854" y="86">final pH: <tspan id="db-ph">--</tspan></text>
+      <text class="stage-value" x="854" y="104">flow: <tspan id="db-flow">--</tspan> L/min</text>
+    </g>
+  </svg>
+
+  <script>
+    const statusEl = document.getElementById("status");
+
+    function setText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+
+    function connect() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+      ws.onopen = () => {
+        statusEl.textContent = "connected";
+        statusEl.className = "status connected";
+      };
+
+      ws.onclose = () => {
+        statusEl.textContent = "disconnected — retrying...";
+        statusEl.className = "status disconnected";
+        setTimeout(connect, 1000);
+      };
+
+      ws.onmessage = (event) => {
+        const state = JSON.parse(event.data);
+
+        if (state.raw_water) {
+          setText("rw-tank", state.raw_water.tank_level);
+          setText("rw-pump", state.raw_water.intake_pump_speed);
+        }
+        if (state.dosing) {
+          setText("ds-ph", state.dosing.ph_value);
+          setText("ds-flow", state.dosing.flow_rate);
+          setText("ds-pump", state.dosing.pump_speed);
+        }
+        if (state.filtration) {
+          setText("fl-turb", state.filtration.turbidity_out);
+          setText("fl-eff", state.filtration.filter_efficiency);
+        }
+        if (state.disinfection) {
+          setText("di-cl", state.disinfection.chlorine_dose);
+          setText("di-path", state.disinfection.pathogen_index);
+        }
+        if (state.distribution) {
+          setText("db-ph", state.distribution.final_ph);
+          setText("db-flow", state.distribution.distribution_flow);
+        }
+      };
+    }
+
+    connect();
+  </script>
+</body>
+</html>
